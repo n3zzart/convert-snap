@@ -3,7 +3,7 @@ import { registerSnapHandler } from "@farcaster/snap-hono";
 
 const app = new Hono();
 
-// ── CORS (important for Vercel) ─────────────────────
+// ── CORS ─────────────────────────
 
 app.use("*", async (c, next) => {
   await next();
@@ -31,7 +31,7 @@ function fmt(n: number) {
 
 const clean = (v?: string) => v?.trim().toLowerCase();
 
-// ── Cache (prevents rate limits) ─────────────────────
+// ── Cache ─────────────────────────
 
 const priceCache = new Map<string, { price: number; ts: number }>();
 const searchCache = new Map<string, string | null>();
@@ -45,26 +45,44 @@ const DIRECT_MAP: Record<string, string> = {
   sol: "solana",
 };
 
+// ── Safe JSON ─────────────────────────
+
+async function safeJson(res: Response) {
+  try {
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
 // ── API ─────────────────────────
 
 async function fetchPrice(id: string) {
-  const cached = priceCache.get(id);
-  const now = Date.now();
+  try {
+    const cached = priceCache.get(id);
+    const now = Date.now();
 
-  if (cached && now - cached.ts < CACHE_TTL) {
-    return cached.price;
+    if (cached && now - cached.ts < CACHE_TTL) {
+      return cached.price;
+    }
+
+    const res = await fetch(
+      `https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=usd`
+    );
+
+    if (!res.ok) return 0;
+
+    const json = await safeJson(res);
+    if (!json) return 0;
+
+    const price = json[id]?.usd ?? 0;
+
+    priceCache.set(id, { price, ts: now });
+
+    return price;
+  } catch {
+    return 0;
   }
-
-  const res = await fetch(
-    `https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=usd`
-  );
-
-  const json = await res.json();
-  const price = json[id]?.usd ?? 0;
-
-  priceCache.set(id, { price, ts: now });
-
-  return price;
 }
 
 async function searchToken(symbol: string) {
@@ -74,7 +92,11 @@ async function searchToken(symbol: string) {
     const res = await fetch(
       `https://api.coingecko.com/api/v3/search?query=${symbol}`
     );
-    const json = await res.json();
+
+    if (!res.ok) return null;
+
+    const json = await safeJson(res);
+    if (!json) return null;
 
     const id = json.coins?.[0]?.id ?? null;
     searchCache.set(symbol, id);
@@ -275,6 +297,8 @@ registerSnapHandler(app, async (ctx) => {
       result = "Error fetching prices";
     }
 
+    console.log({ from, to, amount, result });
+
     return {
       version: "1.0",
       theme: { accent: "purple" },
@@ -298,7 +322,7 @@ registerSnapHandler(app, async (ctx) => {
           },
           err: {
             type: "text",
-            props: { content: "Error", weight: "bold" },
+            props: { content: "Server Error", weight: "bold" },
           },
         },
       },
@@ -306,6 +330,6 @@ registerSnapHandler(app, async (ctx) => {
   }
 });
 
-// ── Vercel export (CRITICAL) ─────────────────────────
+// ── Vercel export ─────────────────────────
 
 export default app;
