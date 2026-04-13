@@ -1,3 +1,4 @@
+export const runtime = "nodejs";
 import { Hono } from "hono";
 import { registerSnapHandler } from "@farcaster/snap-hono";
 
