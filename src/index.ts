@@ -1,8 +1,14 @@
 import { Hono } from "hono";
-import { serve } from "@hono/node-server";
 import { registerSnapHandler } from "@farcaster/snap-hono";
 
 const app = new Hono();
+
+// ── CORS (important for Vercel) ─────────────────────
+
+app.use("*", async (c, next) => {
+  await next();
+  c.header("Access-Control-Allow-Origin", "*");
+});
 
 // ── Helpers ─────────────────────────
 
@@ -25,7 +31,7 @@ function fmt(n: number) {
 
 const clean = (v?: string) => v?.trim().toLowerCase();
 
-// ── Cache (fixes rate limit issues) ─────────────────
+// ── Cache (prevents rate limits) ─────────────────────
 
 const priceCache = new Map<string, { price: number; ts: number }>();
 const searchCache = new Map<string, string | null>();
@@ -262,8 +268,6 @@ registerSnapHandler(app, async (ctx) => {
 
       note = `${from.toUpperCase()} $${fmt(fromData.price)} · ${to.toUpperCase()} $${fmt(toData.price)}`;
 
-      // ── Share text (polished) ─────────────────
-
       if (!result.includes("Invalid")) {
         shareText = `Just found out that ${amount} ${from.toUpperCase()} is now ${result}. Convert any currency with the snap below 👇`;
       }
@@ -302,10 +306,6 @@ registerSnapHandler(app, async (ctx) => {
   }
 });
 
-// ── Server ─────────────────────────
+// ── Vercel export (CRITICAL) ─────────────────────────
 
-const port = parseInt(process.env.PORT ?? "3003");
-
-serve({ fetch: app.fetch, port }, () => {
-  console.log(`Running on http://localhost:${port}`);
-});
+export default app;
