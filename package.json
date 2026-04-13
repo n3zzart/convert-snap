@@ -2,6 +2,7 @@
   "name": "usefulsnap",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "cross-env SKIP_JFS_VERIFICATION=true tsx watch src/index.ts",
     "build": "tsc",
